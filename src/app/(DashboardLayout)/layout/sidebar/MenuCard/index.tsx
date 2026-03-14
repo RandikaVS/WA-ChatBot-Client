@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 
 // material-ui
 import { useTheme } from "@mui/material/styles";
@@ -29,27 +29,40 @@ interface LinearProgressWithLabelProps {
 }
 
 function LinearProgressWithLabel({ value, ...others }: LinearProgressWithLabelProps) {
+
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= value) {
+          clearInterval(timer);
+          return value;
+        }
+        return prev + 1;
+      });
+    }, 30);
+
+    return () => clearInterval(timer);
+  }, [value]);
+
   return (
     <Stack sx={{ gap: 1 }}>
       <Stack direction="row" sx={{ justifyContent: "space-between"}}>
         <Typography
           variant="h6"
           sx={{
-            color: "secondary.dark",
+            color: "#3b82f6",
             fontWeight: "bold",
           }}
         >
-          Sales through whatsapp
+          AI and Inventory Agent
         </Typography>
-        <Typography
-          variant="h6"
-          sx={{ color: "inherit" }}
-        >{`${Math.round(value)}%`}</Typography>
       </Stack>
+
       <LinearProgress
-        aria-label="progress of theme"
         variant="determinate"
-        value={value}
+        value={progress}
         {...others}
         sx={{
           height: 10,
@@ -127,7 +140,7 @@ function MenuCard() {
             />
           </ListItem>
         </List>
-        <LinearProgressWithLabel value={85} />
+        <LinearProgressWithLabel value={100} />
       </Box>
     </Card>
   );

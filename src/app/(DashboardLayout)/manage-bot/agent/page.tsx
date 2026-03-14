@@ -15,6 +15,7 @@ import {
 } from '@tabler/icons-react';
 import PageContainer from '@/app/(DashboardLayout)/components/container/PageContainer';
 import DashboardCard from '@/app/(DashboardLayout)/components/shared/DashboardCard';
+import { useAgentContext } from '@/app/context/agent-context/agent-context';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -254,6 +255,10 @@ const ModelCard = ({
  * confidence before the client goes live with real customers.
  */
 const TestChat = ({ config }: { config: AgentConfig }) => {
+
+  const {
+    testMessage,
+  } = useAgentContext();
   const [messages, setMessages]   = useState<ChatMessage[]>([]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
@@ -276,21 +281,30 @@ const TestChat = ({ config }: { config: AgentConfig }) => {
       // Call your FastAPI backend — passes the current config so the AI
       // uses the system prompt the client has written but NOT yet saved.
       // This "preview before save" UX is what makes this feature valuable.
-      const response = await fetch('/api/agent/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // const response = await fetch('/api/agent/test', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     message: userMsg.content,
+      //     system_prompt: config.systemPrompt,
+      //     model: config.model,
+      //     language: config.language,
+      //     temperature: config.temperature,
+      //   }),
+      // });
+      const payload = {
           message: userMsg.content,
-          system_prompt: config.systemPrompt,
+          systemPrompt: config.systemPrompt,
           model: config.model,
           language: config.language,
           temperature: config.temperature,
-        }),
-      });
-      const data = await response.json();
+          maxTokens: config.maxTokens,
+      }
+      const data = await testMessage(payload);
+      // const data = await response.json();
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.reply || 'No response received.',
+        content: data?.reply || 'No response received.',
         timestamp: new Date(),
       }]);
     } catch {
@@ -447,63 +461,48 @@ const TestChat = ({ config }: { config: AgentConfig }) => {
 
 const MyAgentPage = () => {
 
-  const [config, setConfig] = useState<AgentConfig>({
-    isActive: true,
-    businessName: 'ABC Shoes Colombo',
-    systemPrompt: `You are a helpful customer support agent for ABC Shoes Colombo.
+  const {
+    config, stats,
+    configLoading, statsLoading,
+    saving, error,
+    fetchConfig, saveConfig, testMessage, fetchStats,
+  } = useAgentContext();
 
-Our products: sneakers, formal shoes, and sandals.
-Sizes available: 36 to 46.
-Delivery: 2-3 days island wide. Free delivery over LKR 5,000.
 
-Always be friendly and professional. Reply in the same language the customer uses.
-If a product is out of stock, suggest similar alternatives.
-For complaints or complex issues, offer to connect with a human agent.`,
-    welcomeMessage: 'Hi! 👋 Welcome to ABC Shoes. How can I help you today?',
-    model: 'gemini-2.0-flash',
-    language: 'auto',
-    temperature: 0.7,
-    maxTokens: 400,
-    replyDelay: 0,
-  });
+  const [localConfig, setLocalConfig] = useState<AgentConfig | null>(null);
+  const [saved, setSaved]= useState(false);
 
-  const [saving, setSaving]     = useState(false);
-  const [saved, setSaved]       = useState(false);
-  const [charCount, setCharCount] = useState(config.systemPrompt.length);
+  useEffect(() => {
+    if (config) setLocalConfig({ ...config });
+  }, [config]);
 
-  // Recommended system prompt character range — too short = vague AI,
-  // too long = slow and expensive AI calls
-  const PROMPT_MIN = 100;
-  const PROMPT_MAX = 2000;
-  const promptHealth = charCount < PROMPT_MIN ? 'too_short'
-    : charCount > PROMPT_MAX ? 'too_long' : 'good';
+  // Fetch data when the page mounts
+  useEffect(() => {
+    fetchConfig();
+    fetchStats();
+  }, [fetchConfig, fetchStats]);
 
-  const updateConfig = (key: keyof AgentConfig, value: unknown) => {
-    setConfig(prev => ({ ...prev, [key]: value }));
+  const updateLocal = (key: keyof AgentConfig, value: unknown) => {
+    setLocalConfig(prev => prev ? { ...prev, [key]: value } : prev);
     setSaved(false);
-    if (key === 'systemPrompt') setCharCount((value as string).length);
-  };
-
-  const applyTemplate = (prompt: string) => {
-    const filled = prompt.replace('{{business_name}}', config.businessName);
-    updateConfig('systemPrompt', filled);
   };
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      await fetch('/api/agent/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      setSaved(true);
-    } catch (e) {
-      console.error('Save failed', e);
-    } finally {
-      setSaving(false);
-    }
+    if (!localConfig) return;
+    // saveConfig returns true/false so we know whether to show "Saved!"
+    const success = await saveConfig(localConfig);
+    if (success) setSaved(true);
   };
+
+  const applyTemplate = (prompt: string) => {
+    const filled = prompt.replace('{{business_name}}', config?.businessName ?? '');
+    updateLocal('systemPrompt', filled);
+  };
+
+  // Show a loading skeleton while config is fetching
+  if (configLoading || !localConfig) {
+    return <PageContainer title="My Agent"><CircularProgress /></PageContainer>;
+  }
 
   return (
     <PageContainer title="My Agent" description="Configure your WhatsApp AI assistant">
@@ -533,15 +532,15 @@ For complaints or complex issues, offer to connect with a human agent.`,
 
       {/* Status banner — most visible element on the page */}
       <StatusBanner
-        isActive={config.isActive}
-        onToggle={() => updateConfig('isActive', !config.isActive)}
+        isActive={config?.isActive??false}
+        onToggle={() => updateLocal('isActive', !config?.isActive)}
         waConnected={true} // replace with real connection check from your API
       />
 
       <Grid container spacing={3}>
 
         {/* ── LEFT COLUMN: Configuration ─────────────────────────── */}
-        <Grid size={{ xs: 12 }}>
+        <Grid size={{ xs: 12, lg: 7 }} >
           <Stack gap={3}>
 
             {/* ── Card 1: Personality ──────────────────────────────── */}
@@ -557,8 +556,8 @@ For complaints or complex issues, offer to connect with a human agent.`,
 
                 <TextField
                   label="Business Name"
-                  value={config.businessName}
-                  onChange={e => updateConfig('businessName', e.target.value)}
+                  value={config?.businessName}
+                  onChange={e => updateLocal('businessName', e.target.value)}
                   size="small"
                   fullWidth
                   helperText="Used to personalise your bot's introduction"
@@ -590,45 +589,56 @@ For complaints or complex issues, offer to connect with a human agent.`,
                     multiline
                     rows={10}
                     fullWidth
-                    value={config.systemPrompt}
-                    onChange={e => updateConfig('systemPrompt', e.target.value)}
+                    value={config?.systemPrompt}
+                    onChange={e => updateLocal('systemPrompt', e.target.value)}
                     placeholder="Describe your business, what the bot should help with, what it should NOT say, and what tone to use..."
                     sx={{ '& textarea': { fontFamily: 'monospace', fontSize: 13, lineHeight: 1.6 } }}
                   />
 
                   {/* Prompt health indicator */}
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
-                    <Box sx={{ flex: 1, mr: 2 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={Math.min((charCount / PROMPT_MAX) * 100, 100)}
-                        sx={{
-                          height: 4, borderRadius: 2,
-                          bgcolor: 'action.hover',
-                          '& .MuiLinearProgress-bar': {
-                            bgcolor: promptHealth === 'good' ? 'success.main'
-                              : promptHealth === 'too_short' ? 'warning.main'
-                              : 'error.main'
-                          },
-                        }}
-                      />
-                    </Box>
-                    <Typography variant="caption" color={
-                      promptHealth === 'good' ? 'success.main'
-                        : promptHealth === 'too_short' ? 'warning.main' : 'error.main'
-                    } fontSize={11}>
-                      {charCount} / {PROMPT_MAX} chars
-                      {promptHealth === 'too_short' && ' — too short, add more detail'}
-                      {promptHealth === 'too_long' && ' — consider shortening'}
-                      {promptHealth === 'good' && ' — good length'}
-                    </Typography>
-                  </Stack>
+                  {(() => {
+                    // Define max prompt length and calculate char count and health
+                    const PROMPT_MAX = 1200;
+                    const charCount = config?.systemPrompt?.length ?? 0;
+                    let promptHealth: 'good' | 'too_short' | 'too_long' = 'good';
+                    if (charCount < 120) promptHealth = 'too_short';
+                    else if (charCount > PROMPT_MAX) promptHealth = 'too_long';
+
+                    return (
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
+                        <Box sx={{ flex: 1, mr: 2 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={Math.min((charCount / PROMPT_MAX) * 100, 100)}
+                            sx={{
+                              height: 4, borderRadius: 2,
+                              bgcolor: 'action.hover',
+                              '& .MuiLinearProgress-bar': {
+                                bgcolor: promptHealth === 'good' ? 'success.main'
+                                  : promptHealth === 'too_short' ? 'warning.main'
+                                  : 'error.main'
+                              },
+                            }}
+                          />
+                        </Box>
+                        <Typography variant="caption" color={
+                          promptHealth === 'good' ? 'success.main'
+                            : promptHealth === 'too_short' ? 'warning.main' : 'error.main'
+                        } fontSize={11}>
+                          {charCount} / {PROMPT_MAX} chars
+                          {promptHealth === 'too_short' && ' — too short, add more detail'}
+                          {promptHealth === 'too_long' && ' — consider shortening'}
+                          {promptHealth === 'good' && ' — good length'}
+                        </Typography>
+                      </Stack>
+                    );
+                  })()}
                 </Box>
 
                 <TextField
                   label="Welcome Message"
-                  value={config.welcomeMessage}
-                  onChange={e => updateConfig('welcomeMessage', e.target.value)}
+                  value={config?.welcomeMessage}
+                  onChange={e => updateLocal('welcomeMessage', e.target.value)}
                   size="small"
                   fullWidth
                   helperText="Sent automatically when a new customer starts a conversation"
@@ -649,8 +659,8 @@ For complaints or complex issues, offer to connect with a human agent.`,
                     <Grid size={{ xs: 12, sm: 6 }} key={m.value}>
                       <ModelCard
                         model={m}
-                        selected={config.model === m.value}
-                        onSelect={() => updateConfig('model', m.value)}
+                        selected={config?.model === m.value}
+                        onSelect={() => updateLocal('model', m.value)}
                       />
                     </Grid>
                   ))}
@@ -666,9 +676,9 @@ For complaints or complex issues, offer to connect with a human agent.`,
                   <FormControl fullWidth size="small">
                     <InputLabel>Reply Language</InputLabel>
                     <Select
-                      value={config.language}
+                      value={config?.language}
                       label="Reply Language"
-                      onChange={e => updateConfig('language', e.target.value)}
+                      onChange={e => updateLocal('language', e.target.value)}
                     >
                       {LANGUAGES.map(l => (
                         <MenuItem key={l.value} value={l.value}>{l.label}</MenuItem>
@@ -680,13 +690,13 @@ For complaints or complex issues, offer to connect with a human agent.`,
                   </Typography>
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <FormControl fullWidth size="small">
                     <InputLabel>Reply Delay</InputLabel>
                     <Select
-                      value={config.replyDelay}
+                      value={config?.replyDelay}
                       label="Reply Delay"
-                      onChange={e => updateConfig('replyDelay', e.target.value)}
+                      onChange={e => updateLocal('replyDelay', e.target.value)}
                     >
                       <MenuItem value={0}>Instant (0 seconds)</MenuItem>
                       <MenuItem value={2}>2 seconds — feels natural</MenuItem>
@@ -700,17 +710,17 @@ For complaints or complex issues, offer to connect with a human agent.`,
                 </Grid>
 
                 {/* Creativity slider — temperature in AI terms */}
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <Typography variant="subtitle2" gutterBottom>
                     Creativity
-                    <Chip label={config.temperature <= 0.3 ? 'Precise' : config.temperature <= 0.7 ? 'Balanced' : 'Creative'}
+                    <Chip label={(config?.temperature ?? 0.5) <= 0.3 ? 'Precise' : (config?.temperature ?? 0.5) <= 0.7 ? 'Balanced' : 'Creative'}
                       size="small" sx={{ ml: 1, fontSize: 10, height: 18 }}
-                      color={config.temperature <= 0.3 ? 'info' : config.temperature <= 0.7 ? 'success' : 'warning'}
+                      color={(config?.temperature ?? 0.5) <= 0.3 ? 'info' : (config?.temperature ?? 0.5) <= 0.7 ? 'success' : 'warning'}
                     />
                   </Typography>
                   <Slider
-                    value={config.temperature}
-                    onChange={(_, v) => updateConfig('temperature', v)}
+                    value={config?.temperature}
+                    onChange={(_, v) => updateLocal('temperature', v)}
                     min={0.1} max={1.0} step={0.1}
                     marks={[
                       { value: 0.1, label: 'Strict' },
@@ -728,12 +738,12 @@ For complaints or complex issues, offer to connect with a human agent.`,
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <Typography variant="subtitle2" gutterBottom>
                     Max Reply Length
-                    <Chip label={`~${Math.round(config.maxTokens * 0.75)} words`}
+                    <Chip label={`~${Math.round((config?.maxTokens ?? 400) * 0.75)} words`}
                       size="small" sx={{ ml: 1, fontSize: 10, height: 18 }} />
                   </Typography>
                   <Slider
-                    value={config.maxTokens}
-                    onChange={(_, v) => updateConfig('maxTokens', v)}
+                    value={config?.maxTokens}
+                    onChange={(_, v) => updateLocal('maxTokens', v)}
                     min={100} max={800} step={50}
                     marks={[
                       { value: 100, label: 'Short' },
@@ -754,7 +764,7 @@ For complaints or complex issues, offer to connect with a human agent.`,
         </Grid>
 
         {/* ── RIGHT COLUMN: Test Chat + Stats ────────────────────── */}
-        <Grid size={{ xs: 12}}>
+        <Grid size={{ xs: 12, lg: 5 }}>
           <Box sx={{ position: { lg: 'sticky' }, top: { lg: 24 } }}>
             <Stack gap={3}>
 
@@ -770,7 +780,7 @@ For complaints or complex issues, offer to connect with a human agent.`,
                   />
                 }
               >
-                <TestChat config={config} />
+                {config && <TestChat config={config} />}
               </DashboardCard>
 
               {/* Quick stats */}
@@ -782,7 +792,7 @@ For complaints or complex issues, offer to connect with a human agent.`,
                     { label: 'Escalations', value: '23', change: '-5%', color: 'warning.main' },
                     { label: 'Avg. Response', value: '1.4s', change: '-0.2s', color: 'info.main' },
                   ].map(stat => (
-                    <Grid size={{ xs: 12, sm: 6 }} key={stat.label}>
+                    <Grid size={{ xs: 6 }} key={stat.label}>
                       <Paper elevation={0}
                         sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2,
                           borderLeft: '3px solid', borderLeftColor: stat.color }}>
