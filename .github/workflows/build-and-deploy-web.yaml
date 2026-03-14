@@ -30,13 +30,13 @@ jobs:
       - name: SET ENVIRONEMENT SPECIFIC VARIABLES FOR MAIN
         if: github.ref == 'refs/heads/main'
         run: |
-          echo "REACT_APP_SERVER_URL=https://sanasa-api-service-prod-ejea6bo5rq-wl.a.run.app" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_=https://sanasa-api-service-prod-ejea6bo5rq-wl.a.run.app" >> $GITHUB_ENV
           echo "SERVICE_NAME=dees-international-web-service-prod" >> $GITHUB_ENV
 
       - name: SET ENVIRONEMENT SPECIFIC VARIABLES FOR DEV
         if: github.ref == 'refs/heads/dev'
         run: |
-          echo "REACT_APP_SERVER_URL=https://sanasa-api-service-ejea6bo5rq-wl.a.run.app" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_=https://sanasa-api-service-ejea6bo5rq-wl.a.run.app" >> $GITHUB_ENV
           echo "SERVICE_NAME=dees-international-web-service" >> $GITHUB_ENV
 
       - name: SET DOCKER IMAGE NAME FOR MAIN
@@ -54,11 +54,11 @@ jobs:
           GOOGLE_PROJECT: ${{ secrets.GOOGLE_PROJECT }}
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
           DOCKER_IMAGE: ${{ env.DOCKER_IMAGE }}
-          REACT_APP_SERVER_URL: ${{ env.REACT_APP_SERVER_URL }}
+          NEXT_PUBLIC_: ${{ env.NEXT_PUBLIC_ }}
         run: |
           gcloud auth configure-docker us-west2-docker.pkg.dev
           docker build \
-            --build-arg ARG_REACT_APP_SERVER_URL=$REACT_APP_SERVER_URL \
+            --build-arg ARG_REACT_APP_SERVER_URL=$NEXT_PUBLIC_ \
             -t ${DOCKER_IMAGE} .
 
           docker push ${DOCKER_IMAGE}
