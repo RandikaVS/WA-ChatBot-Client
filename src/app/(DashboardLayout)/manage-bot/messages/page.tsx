@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Box, Grid, Typography, TextField, Chip, Avatar, IconButton,
   Stack, Paper, Badge, Tooltip, Button, Divider, LinearProgress,
-  InputAdornment, Select, MenuItem, FormControl, AvatarGroup,
+  InputAdornment, Select, MenuItem, FormControl, AvatarGroup,Tab, Tabs,
   ToggleButtonGroup, ToggleButton, CircularProgress,
 } from '@mui/material';
 import {
@@ -14,9 +14,11 @@ import {
   IconMessageCircle, IconPhone, IconCircleCheck, IconClock,
   IconRefresh, IconChevronRight, IconBrain, IconTarget,
   IconArrowUp, IconArrowDown, IconMinus, IconSparkles,
-  IconHandStop, IconX, IconDots,
+  IconHandStop, IconX, IconDots,IconRoute
 } from '@tabler/icons-react';
 import PageContainer from '@/app/(DashboardLayout)/components/container/PageContainer';
+import { FlowSetup } from './flow-setup'; 
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -684,15 +686,35 @@ const ChatView = ({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+const TabPanel = ({
+  children,
+  value,
+  index,
+}: {
+  children: React.ReactNode;
+  value:    number;
+  index:    number;
+}) => (
+  <Box hidden={value !== index} sx={{ pt: value === index ? 3 : 0 }}>
+    {value === index && children}
+  </Box>
+);
+ 
+// ─── Main Page — the only part that changes ───────────────────────────────────
+ 
 const ConversationsPage = () => {
+  // ── Tab state — 0 = Conversations, 1 = Setup Flow ──────────
+  const [activeTab, setActiveTab] = useState(0);
+ 
+  // All your existing conversation state
   const [conversations, setConversations] = useState(MOCK_CONVERSATIONS);
   const [selectedId, setSelectedId]       = useState<string | null>('1');
   const [search, setSearch]               = useState('');
   const [filterStatus, setFilterStatus]   = useState<string>('all');
   const [filterSentiment, setFilterSentiment] = useState<string>('all');
-
+ 
   const selected = conversations.find(c => c.id === selectedId) ?? null;
-
+ 
   const filtered = conversations.filter(c => {
     const matchSearch = !search ||
       c.customerName.toLowerCase().includes(search.toLowerCase()) ||
@@ -702,117 +724,173 @@ const ConversationsPage = () => {
     const matchSentiment = filterSentiment === 'all' || c.insight.sentiment === filterSentiment;
     return matchSearch && matchStatus && matchSentiment;
   });
-
+ 
   const handleTakeover = (id: string) =>
     setConversations(prev => prev.map(c => c.id === id ? { ...c, isHumanTakeover: true } : c));
-
+ 
   const handleRelease = (id: string) =>
     setConversations(prev => prev.map(c => c.id === id ? { ...c, isHumanTakeover: false } : c));
-
+ 
   return (
     <PageContainer title="Conversations" description="Customer conversation management">
-
-      {/* Stats bar */}
-      <StatsBar conversations={conversations} />
-
-      {/* Main 3-column layout: filters/list | chat | (insights in chat tabs) */}
-      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider',
-        borderRadius: 3, overflow: 'hidden', height: 'calc(100vh - 280px)', minHeight: 560,
-        display: 'flex' }}>
-
-        {/* ── LEFT: Conversation List ─────────────────────────────── */}
-        <Box sx={{ width: 340, flexShrink: 0, borderRight: '1px solid',
-          borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
-
-          {/* Search + filters */}
-          <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <TextField
-              fullWidth size="small"
-              placeholder="Search by name, phone, message..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: <InputAdornment position="start"><IconSearch size={16} /></InputAdornment>,
-                endAdornment: search ? (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearch('')}><IconX size={14} /></IconButton>
-                  </InputAdornment>
-                ) : null,
-              }}
-              sx={{ mb: 1.5, '& fieldset': { borderRadius: 2.5 } }}
-            />
-
-            <Stack direction="row" gap={1}>
-              <FormControl size="small" sx={{ flex: 1 }}>
-                <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                  sx={{ fontSize: 12, borderRadius: 2 }}>
-                  <MenuItem value="all">All Status</MenuItem>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="escalated">Escalated</MenuItem>
-                  <MenuItem value="resolved">Resolved</MenuItem>
-                  <MenuItem value="waiting">Waiting</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ flex: 1 }}>
-                <Select value={filterSentiment} onChange={e => setFilterSentiment(e.target.value)}
-                  sx={{ fontSize: 12, borderRadius: 2 }}>
-                  <MenuItem value="all">All Sentiment</MenuItem>
-                  <MenuItem value="positive">Positive</MenuItem>
-                  <MenuItem value="neutral">Neutral</MenuItem>
-                  <MenuItem value="negative">Negative</MenuItem>
-                </Select>
-              </FormControl>
-            </Stack>
+ 
+      {/* ── Page-level tabs ──────────────────────────────────── */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 0 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          sx={{
+            '& .MuiTab-root': { fontSize: 13, fontWeight: 500, textTransform: 'none', minHeight: 48 },
+            '& .Mui-selected': { fontWeight: 700 },
+          }}
+        >
+          <Tab
+            label={
+              <Stack direction="row" alignItems="center" gap={1}>
+                <IconMessageCircle size={16} />
+                Conversations
+              </Stack>
+            }
+          />
+          <Tab
+            label={
+              <Stack direction="row" alignItems="center" gap={1}>
+                <IconRoute size={16} />
+                Setup Flow
+              </Stack>
+            }
+          />
+        </Tabs>
+      </Box>
+ 
+      {/* ── Tab 0: Conversations ─────────────────────────────── */}
+      <TabPanel value={activeTab} index={0}>
+ 
+        {/* Stats bar */}
+        <StatsBar conversations={conversations} />
+ 
+        {/* Main 2-column layout */}
+        <Paper elevation={0} sx={{
+          border: '1px solid', borderColor: 'divider',
+          borderRadius: 3, overflow: 'hidden',
+          height: 'calc(100vh - 320px)', minHeight: 560,
+          display: 'flex',
+        }}>
+ 
+          {/* LEFT: Conversation List */}
+          <Box sx={{
+            width: 340, flexShrink: 0,
+            borderRight: '1px solid', borderColor: 'divider',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Search + filters */}
+            <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <TextField
+                fullWidth size="small"
+                placeholder="Search by name, phone, message..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start"><IconSearch size={16} /></InputAdornment>
+                  ),
+                  endAdornment: search ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setSearch('')}>
+                        <IconX size={14} />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null,
+                }}
+                sx={{ mb: 1.5, '& fieldset': { borderRadius: 2.5 } }}
+              />
+              <Stack direction="row" gap={1}>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={filterStatus}
+                    onChange={e => setFilterStatus(e.target.value)}
+                    sx={{ fontSize: 12, borderRadius: 2 }}
+                  >
+                    <MenuItem value="all">All Status</MenuItem>
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="escalated">Escalated</MenuItem>
+                    <MenuItem value="resolved">Resolved</MenuItem>
+                    <MenuItem value="waiting">Waiting</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={filterSentiment}
+                    onChange={e => setFilterSentiment(e.target.value)}
+                    sx={{ fontSize: 12, borderRadius: 2 }}
+                  >
+                    <MenuItem value="all">All Sentiment</MenuItem>
+                    <MenuItem value="positive">Positive</MenuItem>
+                    <MenuItem value="neutral">Neutral</MenuItem>
+                    <MenuItem value="negative">Negative</MenuItem>
+                  </Select>
+                </FormControl>
+              </Stack>
+            </Box>
+ 
+            <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="caption" color="text.secondary" fontSize={11}>
+                {filtered.length} conversation{filtered.length !== 1 ? 's' : ''}
+                {filterStatus !== 'all' || filterSentiment !== 'all' ? ' (filtered)' : ''}
+              </Typography>
+            </Box>
+ 
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
+              {filtered.length === 0 ? (
+                <Box sx={{ py: 8, textAlign: 'center', opacity: 0.5 }}>
+                  <IconMessageCircle size={32} strokeWidth={1} />
+                  <Typography variant="caption" display="block" mt={1}>
+                    No conversations found
+                  </Typography>
+                </Box>
+              ) : (
+                filtered.map(c => (
+                  <ConvListItem
+                    key={c.id}
+                    conv={c}
+                    selected={selectedId === c.id}
+                    onClick={() => setSelectedId(c.id)}
+                  />
+                ))
+              )}
+            </Box>
           </Box>
-
-          {/* Count */}
-          <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="caption" color="text.secondary" fontSize={11}>
-              {filtered.length} conversation{filtered.length !== 1 ? 's' : ''}
-              {filterStatus !== 'all' || filterSentiment !== 'all' ? ' (filtered)' : ''}
-            </Typography>
-          </Box>
-
-          {/* List */}
-          <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
-            {filtered.length === 0 ? (
-              <Box sx={{ py: 8, textAlign: 'center', opacity: 0.5 }}>
-                <IconMessageCircle size={32} strokeWidth={1} />
-                <Typography variant="caption" display="block" mt={1}>No conversations found</Typography>
-              </Box>
+ 
+          {/* RIGHT: Chat View */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {selected ? (
+              <ChatView
+                conv={selected}
+                onTakeover={handleTakeover}
+                onRelease={handleRelease}
+              />
             ) : (
-              filtered.map(c => (
-                <ConvListItem
-                  key={c.id}
-                  conv={c}
-                  selected={selectedId === c.id}
-                  onClick={() => setSelectedId(c.id)}
-                />
-              ))
+              <Box sx={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 2, opacity: 0.4,
+              }}>
+                <IconMessageCircle size={48} strokeWidth={1} />
+                <Typography color="text.secondary">
+                  Select a conversation to view
+                </Typography>
+              </Box>
             )}
           </Box>
-        </Box>
-
-        {/* ── RIGHT: Chat View ────────────────────────────────────── */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {selected ? (
-            <ChatView
-              conv={selected}
-              onTakeover={handleTakeover}
-              onRelease={handleRelease}
-            />
-          ) : (
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 2, opacity: 0.4 }}>
-              <IconMessageCircle size={48} strokeWidth={1} />
-              <Typography color="text.secondary">Select a conversation to view</Typography>
-            </Box>
-          )}
-        </Box>
-
-      </Paper>
+        </Paper>
+      </TabPanel>
+ 
+      {/* ── Tab 1: Setup Flow ────────────────────────────────── */}
+      <TabPanel value={activeTab} index={1}>
+        <FlowSetup />
+      </TabPanel>
+ 
     </PageContainer>
   );
 };
-
+ 
 export default ConversationsPage;
